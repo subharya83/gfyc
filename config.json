@@ -1,0 +1,66 @@
+{
+    "census": {
+        "url": "https://api.census.gov/data/{year}/acs/acs5",
+        "params": {
+            "get": "NAME,B01001_001E,B19013_001E,B25077_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E",
+            "for": "county:{county}",
+            "in": "state:{state}",
+            "key": "YOUR_CENSUS_API_KEY"
+        },
+        "columns": {
+            "B01001_001E": "population",
+            "B19013_001E": "median_household_income",
+            "B25077_001E": "median_home_value",
+            "B15003_022E": "bachelors_degree",
+            "B15003_023E": "masters_degree",
+            "B15003_024E": "professional_degree",
+            "B15003_025E": "doctorate_degree"
+        }
+    },
+    "bls": {
+        "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+        "params": {
+            "registrationkey": "",
+            "seriesid": [],
+            "startyear": "{start_year}",
+            "endyear": "{end_year}"
+        },
+        "series_template": "LAUCN{fips}00000000{data_type}"
+    },
+    "zillow": {
+        "url": "https://www.zillow.com/research/data/",
+        "direct_download": "https://files.zillowstatic.com/research/public_csvs/zhvi/County_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
+    },
+    "noaa": {
+        "url": "https://www.ncdc.noaa.gov/cdo-web/api/v2/data",
+        "params": {
+            "datasetid": "GHCND",
+            "locationid": "FIPS:{fips}",
+            "startdate": "{start_date}",
+            "enddate": "{end_date}",
+            "limit": 1000,
+            "datatypeid": "TAVG,TMIN,TMAX,PRCP",
+            "units": "standard"
+        },
+        "headers": {
+            "token": "YOUR_NOAA_TOKEN"
+        }
+    },
+    "fred": {
+        "url": "https://api.stlouisfed.org/fred/county/data",
+        "params": {
+            "county_fips": "{fips}",
+            "api_key": "YOUR_FRED_API_KEY",
+            "file_type": "json",
+            "frequency": "m",
+            "series_group": "income,housing,employment"
+        }
+    },
+    "db": {
+        "dbname": "your_dbname",
+        "user": "your_username",
+        "password": "your_password",
+        "host": "your_host",
+        "port": "your_port"
+    }
+}

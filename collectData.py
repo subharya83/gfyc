@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import time
 import logging
 from pathlib import Path
-import csv
+import argparse
 
 # Configure logging
 logging.basicConfig(
@@ -20,79 +20,10 @@ logger = logging.getLogger("county_data_collector")
 DATA_DIR = Path("county_data")
 DATA_DIR.mkdir(exist_ok=True)
 
-# Census API key - replace with your own
-CENSUS_API_KEY = "YOUR_CENSUS_API_KEY"  # Get from https://api.census.gov/data/key_signup.html
-
-# Define data sources with their configurations
-DATA_SOURCES = {
-    "census": {
-        "url": "https://api.census.gov/data/{year}/acs/acs5",
-        "params": {
-            "get": "NAME,B01001_001E,B19013_001E,B25077_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E",
-            "for": "county:{county}",
-            "in": "state:{state}",
-            "key": CENSUS_API_KEY
-        },
-        "columns": {
-            "B01001_001E": "population",
-            "B19013_001E": "median_household_income",
-            "B25077_001E": "median_home_value",
-            "B15003_022E": "bachelors_degree",
-            "B15003_023E": "masters_degree",
-            "B15003_024E": "professional_degree",
-            "B15003_025E": "doctorate_degree"
-        },
-        "frequency": "annual",
-        "filename": "census_data.csv"
-    },
-    "bls": {
-        "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/",
-        "params": {
-            "registrationkey": "",  # Optional, higher rate limits with registration
-            "seriesid": [],  # Will be populated dynamically with county codes
-            "startyear": "{start_year}",
-            "endyear": "{end_year}"
-        },
-        "series_template": "LAUCN{fips}00000000{data_type}",  # data_type: 03=unemployment_rate, 04=unemployment, 05=employment
-        "frequency": "monthly",
-        "filename": "bls_employment_data.csv"
-    },
-    "zillow": {
-        "url": "https://www.zillow.com/research/data/",
-        "direct_download": "https://files.zillowstatic.com/research/public_csvs/zhvi/County_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv",
-        "frequency": "monthly",
-        "filename": "zillow_housing_data.csv"
-    },
-    "noaa": {
-        "url": "https://www.ncdc.noaa.gov/cdo-web/api/v2/data",
-        "params": {
-            "datasetid": "GHCND",
-            "locationid": "FIPS:{fips}",
-            "startdate": "{start_date}",
-            "enddate": "{end_date}",
-            "limit": 1000,
-            "datatypeid": "TAVG,TMIN,TMAX,PRCP",
-            "units": "standard"
-        },
-        "headers": {
-            "token": "YOUR_NOAA_TOKEN"  # Get from https://www.ncdc.noaa.gov/cdo-web/token
-        },
-        "frequency": "monthly",
-        "filename": "noaa_climate_data.csv"
-    },
-    "fred": {
-        "url": "https://api.stlouisfed.org/fred/county/data",
-        "params": {
-            "county_fips": "{fips}",
-            "api_key": "YOUR_FRED_API_KEY",  # Get from https://fred.stlouisfed.org/docs/api/api_key.html
-            "file_type": "json",
-            "frequency": "m",  # monthly
-            "series_group": "income,housing,employment"
-        },
-        "frequency": "monthly",
-        "filename": "fred_economic_data.csv"
-    }
-}
+def load_config(config_file):
+    """Load configuration from a JSON file."""
+    with open(config_file, 'r') as f:
+        return json.load(f)
 
 def split_fips(fips):
     """Split FIPS code into state and county components."""
@@ -102,12 +33,12 @@ def split_fips(fips):
         logger.error(f"Invalid FIPS code: {fips}. Must be 5 digits.")
         return None, None
 
-def fetch_census_data(counties, year):
+def fetch_census_data(counties, year, config):
     """Fetch data from Census API for specified counties."""
     logger.info(f"Fetching Census data for {len(counties)} counties for year {year}")
     
     results = []
-    source_config = DATA_SOURCES["census"]
+    source_config = config["census"]
     
     for fips in counties:
         state_code, county_code = split_fips(fips)
@@ -427,18 +358,6 @@ def fetch_fred_data(counties, start_date, end_date):
         return df_wide
     return None
 
-def is_data_outdated(filename, max_age_days=30):
-    """Check if data file is outdated based on modification time."""
-    file_path = DATA_DIR / filename
-    
-    if not file_path.exists():
-        return True
-    
-    file_mod_time = datetime.fromtimestamp(file_path.stat().st_mtime)
-    current_time = datetime.now()
-    
-    return (current_time - file_mod_time).days > max_age_days
-
 def save_to_csv(df, filename, mode="w"):
     """Save DataFrame to CSV file."""
     if df is None or df.empty:
@@ -462,314 +381,22 @@ def save_to_csv(df, filename, mode="w"):
         logger.error(f"Error saving data to {filename}: {e}")
         return False
 
-def check_and_update_data(counties, start_date, end_date):
-    """Check if data files need updating and fetch new data if needed."""
-    update_results = {}
-    
-    for source_name, source_config in DATA_SOURCES.items():
-        filename = source_config["filename"]
-        
-        if is_data_outdated(filename):
-            logger.info(f"Data for {source_name} is outdated or missing. Updating...")
-            
-            if source_name == "census":
-                # For annual data, we get the latest year
-                current_year = datetime.now().year
-                # Census data typically has a 1-2 year lag
-                latest_year = current_year - 2
-                
-                df = fetch_census_data(counties, latest_year)
-                update_results[source_name] = save_to_csv(df, filename)
-                
-            elif source_name == "bls":
-                df = fetch_bls_data(counties, start_date, end_date)
-                update_results[source_name] = save_to_csv(df, filename)
-                
-            elif source_name == "zillow":
-                df = fetch_zillow_data(counties, start_date, end_date)
-                update_results[source_name] = save_to_csv(df, filename)
-                
-            elif source_name == "noaa":
-                df = fetch_noaa_data(counties, start_date, end_date)
-                update_results[source_name] = save_to_csv(df, filename)
-                
-            elif source_name == "fred":
-                df = fetch_fred_data(counties, start_date, end_date)
-                update_results[source_name] = save_to_csv(df, filename)
-        else:
-            logger.info(f"Data for {source_name} is up to date.")
-            update_results[source_name] = True
-    
-    return update_results
-
-def fetch_all_data(counties, start_date, end_date):
-    """Fetch data from all sources for the specified counties and date range."""
-    results = {}
-    
-    # Census data (annual)
-    years = list(range(start_date.year, end_date.year + 1))
-    census_dfs = []
-    
-    for year in years:
-        df = fetch_census_data(counties, year)
-        if df is not None:
-            census_dfs.append(df)
-    
-    if census_dfs:
-        census_df = pd.concat(census_dfs)
-        save_to_csv(census_df, DATA_SOURCES["census"]["filename"])
-        results["census"] = True
-    else:
-        results["census"] = False
-    
-    # BLS employment data (monthly)
-    bls_df = fetch_bls_data(counties, start_date, end_date)
-    save_to_csv(bls_df, DATA_SOURCES["bls"]["filename"])
-    results["bls"] = bls_df is not None
-    
-    # Zillow housing data (monthly)
-    zillow_df = fetch_zillow_data(counties, start_date, end_date)
-    save_to_csv(zillow_df, DATA_SOURCES["zillow"]["filename"])
-    results["zillow"] = zillow_df is not None
-    
-    # NOAA climate data (monthly/daily)
-    noaa_df = fetch_noaa_data(counties, start_date, end_date)
-    save_to_csv(noaa_df, DATA_SOURCES["noaa"]["filename"])
-    results["noaa"] = noaa_df is not None
-    
-    # FRED economic data (monthly)
-    fred_df = fetch_fred_data(counties, start_date, end_date)
-    save_to_csv(fred_df, DATA_SOURCES["fred"]["filename"])
-    results["fred"] = fred_df is not None
-    
-    return results
-
-def create_postgres_scripts():
-    """Create SQL scripts for loading data into PostgreSQL."""
-    # Create a directory for SQL scripts
-    sql_dir = Path("sql_scripts")
-    sql_dir.mkdir(exist_ok=True)
-    
-    # Create table creation script
-    create_tables_sql = """
-    -- Create schema for county data
-    CREATE SCHEMA IF NOT EXISTS county_data;
-    
-    -- Census demographics table
-    CREATE TABLE IF NOT EXISTS county_data.census (
-        fips CHAR(5) NOT NULL,
-        date DATE NOT NULL,
-        year INT NOT NULL,
-        population INT,
-        median_household_income NUMERIC,
-        median_home_value NUMERIC,
-        bachelors_degree INT,
-        masters_degree INT,
-        professional_degree INT,
-        doctorate_degree INT,
-        PRIMARY KEY (fips, date)
-    );
-    
-    -- BLS employment data
-    CREATE TABLE IF NOT EXISTS county_data.employment (
-        fips CHAR(5) NOT NULL,
-        date DATE NOT NULL,
-        year INT NOT NULL,
-        month INT NOT NULL,
-        unemployment_rate NUMERIC,
-        unemployment_count INT,
-        employment_count INT,
-        PRIMARY KEY (fips, date)
-    );
-    
-    -- Zillow housing data
-    CREATE TABLE IF NOT EXISTS county_data.housing (
-        fips CHAR(5) NOT NULL,
-        date DATE NOT NULL,
-        year INT NOT NULL,
-        month INT NOT NULL,
-        home_value_index NUMERIC,
-        region_name VARCHAR(255),
-        PRIMARY KEY (fips, date)
-    );
-    
-    -- NOAA climate data
-    CREATE TABLE IF NOT EXISTS county_data.climate (
-        fips CHAR(5) NOT NULL,
-        date DATE NOT NULL,
-        year INT NOT NULL,
-        month INT NOT NULL,
-        avg_temperature NUMERIC,
-        min_temperature NUMERIC,
-        max_temperature NUMERIC,
-        precipitation NUMERIC,
-        PRIMARY KEY (fips, date)
-    );
-    
-    -- FRED economic data
-    CREATE TABLE IF NOT EXISTS county_data.economic (
-        fips CHAR(5) NOT NULL,
-        date DATE NOT NULL,
-        year INT NOT NULL,
-        month INT NOT NULL,
-        median_days_on_market NUMERIC,
-        median_listing_price NUMERIC,
-        active_listings_count INT,
-        rental_vacancy_rate NUMERIC,
-        PRIMARY KEY (fips, date)
-    );
-    
-    -- Counties reference table
-    CREATE TABLE IF NOT EXISTS county_data.counties (
-        fips CHAR(5) PRIMARY KEY,
-        state_fips CHAR(2) NOT NULL,
-        county_fips CHAR(3) NOT NULL,
-        state_name VARCHAR(100),
-        county_name VARCHAR(100)
-    );
-    """
-    
-    with open(sql_dir / "create_tables.sql", "w") as f:
-        f.write(create_tables_sql)
-    
-    # Create data loading script
-    load_data_sql = """
-    -- Load census data
-    COPY county_data.census FROM '/path/to/county_data/census_data.csv' 
-    DELIMITER ',' CSV HEADER;
-    
-    -- Load BLS employment data
-    COPY county_data.employment FROM '/path/to/county_data/bls_employment_data.csv' 
-    DELIMITER ',' CSV HEADER;
-    
-    -- Load Zillow housing data
-    COPY county_data.housing FROM '/path/to/county_data/zillow_housing_data.csv' 
-    DELIMITER ',' CSV HEADER;
-    
-    -- Load NOAA climate data
-    COPY county_data.climate FROM '/path/to/county_data/noaa_climate_data.csv' 
-    DELIMITER ',' CSV HEADER;
-    
-    -- Load FRED economic data
-    COPY county_data.economic FROM '/path/to/county_data/fred_economic_data.csv' 
-    DELIMITER ',' CSV HEADER;
-    """
-    
-    with open(sql_dir / "load_data.sql", "w") as f:
-        f.write(load_data_sql)
-    
-    # Create sample queries script
-    sample_queries_sql = """
-    -- Sample query 1: Counties with highest population growth
-    SELECT 
-        c1.fips,
-        c1.county_name,
-        c1.state_name,
-        c2.population as pop_start,
-        c1.population as pop_end,
-        round(((c1.population - c2.population) / c2.population::numeric * 100), 2) as growth_pct
-    FROM 
-        county_data.census c1
-    JOIN 
-        county_data.census c2 ON c1.fips = c2.fips AND c1.year = c2.year + 1
-    JOIN 
-        county_data.counties co ON c1.fips = co.fips
-    ORDER BY 
-        growth_pct DESC
-    LIMIT 10;
-    
-    -- Sample query 2: Counties with lowest unemployment rates
-    SELECT 
-        e.fips,
-        co.county_name,
-        co.state_name,
-        e.date,
-        e.unemployment_rate
-    FROM 
-        county_data.employment e
-    JOIN 
-        county_data.counties co ON e.fips = co.fips
-    WHERE 
-        e.date = (SELECT MAX(date) FROM county_data.employment)
-    ORDER BY 
-        e.unemployment_rate ASC
-    LIMIT 10;
-    
-    -- Sample query 3: Counties with highest home values and their climate data
-    SELECT 
-        h.fips,
-        co.county_name,
-        co.state_name,
-        h.date,
-        h.home_value_index,
-        c.avg_temperature,
-        c.precipitation
-    FROM 
-        county_data.housing h
-    JOIN 
-        county_data.climate c ON h.fips = c.fips AND h.date = c.date
-    JOIN 
-        county_data.counties co ON h.fips = co.fips
-    WHERE 
-        h.date = (SELECT MAX(date) FROM county_data.housing)
-    ORDER BY 
-        h.home_value_index DESC
-    LIMIT 10;
-    
-    -- Sample query 4: Correlation between education level and income
-    SELECT 
-        corr(
-            (c.bachelors_degree + c.masters_degree + c.professional_degree + c.doctorate_degree)::numeric / c.population * 100, 
-            c.median_household_income
-        ) as education_income_correlation
-    FROM 
-        county_data.census c
-    WHERE 
-        c.year = (SELECT MAX(year) FROM county_data.census);
-    
-    -- Sample query 5: Counties with most extreme temperature variations
-    SELECT 
-        c.fips,
-        co.county_name,
-        co.state_name,
-        AVG(c.max_temperature - c.min_temperature) as avg_daily_temp_range,
-        AVG(c.avg_temperature) as avg_temp
-    FROM 
-        county_data.climate c
-    JOIN 
-        county_data.counties co ON c.fips = co.fips
-    GROUP BY 
-        c.fips, co.county_name, co.state_name
-    ORDER BY 
-        avg_daily_temp_range DESC
-    LIMIT 10;
-    """
-    
-    with open(sql_dir / "sample_queries.sql", "w") as f:
-        f.write(sample_queries_sql)
-    
-    logger.info("Created PostgreSQL scripts in the sql_scripts directory")
-
 def main():
-    """Main function to run the data collection."""
-    # Example usage:
-    counties = [
-        "06037",  # Los Angeles County, CA
-        "36061",  # New York County, NY
-        "17031",  # Cook County, IL
-        "48201",  # Harris County, TX
-        "04013"   # Maricopa County, AZ
-    ]
+    parser = argparse.ArgumentParser(description="Fetch data for specified counties and date range.")
+    parser.add_argument("--counties", nargs="+", required=True, help="List of county FIPS codes")
+    parser.add_argument("--start_date", required=True, help="Start date in YYYY-MM-DD format")
+    parser.add_argument("--end_date", required=True, help="End date in YYYY-MM-DD format")
+    parser.add_argument("--config", required=True, help="Path to config file")
     
-    # Date range for data collection
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=365 * 3)  # 3 years of data
+    args = parser.parse_args()
     
-    print(f"Fetching data for counties: {counties}")
-    print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-
+    counties = args.counties
+    start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
+    end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
+    config = load_config(args.config)
+    
     # Fetch data from all sources
-    results = fetch_all_data(counties, start_date, end_date)
+    results = fetch_all_data(counties, start_date, end_date, config)
 
     # Check which data sources were successfully fetched
     for source, success in results.items():
@@ -777,11 +404,6 @@ def main():
             logger.info(f"Successfully fetched data from {source}")
         else:
             logger.error(f"Failed to fetch data from {source}")
-
-    # Create PostgreSQL scripts for loading and querying the data
-    create_postgres_scripts()
-
-    logger.info("Data collection and script generation complete.")
 
 if __name__ == "__main__":
     main()

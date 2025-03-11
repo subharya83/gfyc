@@ -766,5 +766,22 @@ def main():
     start_date = end_date - timedelta(days=365 * 3)  # 3 years of data
     
     print(f"Fetching data for counties: {counties}")
-    print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y
+    print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
 
+    # Fetch data from all sources
+    results = fetch_all_data(counties, start_date, end_date)
+
+    # Check which data sources were successfully fetched
+    for source, success in results.items():
+        if success:
+            logger.info(f"Successfully fetched data from {source}")
+        else:
+            logger.error(f"Failed to fetch data from {source}")
+
+    # Create PostgreSQL scripts for loading and querying the data
+    create_postgres_scripts()
+
+    logger.info("Data collection and script generation complete.")
+
+if __name__ == "__main__":
+    main()

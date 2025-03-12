@@ -1,0 +1,12 @@
+Field, Data_sources, Python_API_available
+"Employment",
+"Weather",
+"Tourism",
+"Transportation",
+"Politics",
+"Median Income",
+"Population",
+"Education",
+"Healthcare",
+"Violent Crime",
+

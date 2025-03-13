@@ -10,7 +10,7 @@ This project leverages data on **event-driven migration factors** (e.g., pandemi
 economic disruptions) and **underlying structural mobility factors** (e.g., economic opportunity, 
 lifestyle, demographics) to create a comprehensive tool for users considering relocation. The data is 
 collected on a periodic cadence from publicly available APIs provided by government agencies, as listed
-[here]. 
+[here](./Datasources.md). 
 ---
 
 ## Features

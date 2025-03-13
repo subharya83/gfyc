@@ -1,10 +1,16 @@
 # County Migration Assistant
 
 ## Overview
-The **County Migration Assistant** is a web application designed to help users identify the best county to migrate to in the United States based on their preferences. By analyzing factors such as economic opportunity, lifestyle, quality of life, and demographic considerations, the app provides tailored recommendations to simplify the decision-making process for relocation.
+The **County Migration Assistant** is a web application designed to help users identify the best county 
+to migrate to in the United States based on their preferences. By analyzing [factors](./Factors.md) 
+such as economic opportunity, lifestyle, quality of life, and demographic considerations, the app provides 
+tailored recommendations to simplify the decision-making process for relocation.
 
-This project leverages data on **event-driven migration factors** (e.g., pandemics, natural disasters, economic disruptions) and **underlying structural mobility factors** (e.g., economic opportunity, lifestyle, demographics) to create a comprehensive tool for users considering relocation.
-
+This project leverages data on **event-driven migration factors** (e.g., pandemics, natural disasters, 
+economic disruptions) and **underlying structural mobility factors** (e.g., economic opportunity, 
+lifestyle, demographics) to create a comprehensive tool for users considering relocation. The data is 
+collected on a periodic cadence from publicly available APIs provided by government agencies, as listed
+[here]. 
 ---
 
 ## Features

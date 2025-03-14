@@ -32,5 +32,6 @@ Here's a tabular overview of publicly available data sources that provide county
 ### National Database of Childcare Prices (NDCP)
 https://apiprod.dol.gov/v4/get/WB/ndcp/csv/metadata?X-API-KEY=nKYXz0hVPpbqF7ewuJWI_zAiV9QssCEhSdioPlTnWVE
 
-### 
+### Mines
+https://apiprod.dol.gov/v4/get/MSHA/mines/csv/metadata?X-API-KEY=nKYXz0hVPpbqF7ewuJWI_zAiV9QssCEhSdioPlTnWVE
 

@@ -9,11 +9,10 @@ urlbase='https://www.roadsideamerica.com/'
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 -o <output_directory> [-t <threads>]"
+    echo "Usage: $0 -o <output_directory>"
     echo "This script retrieves a list of attractions for each state and saves the details into a file."
     echo "Options:"
     echo "  -o <output_directory>  Specify the output directory for saving files."
-    echo "  -t <threads>           Number of threads to use for parallel processing (default: 1)."
     exit 1
 }
 
@@ -99,11 +98,9 @@ process_state() {
 }
 
 # Parse command-line arguments
-threads=1
-while getopts ":o:t:" opt; do
+while getopts ":o:" opt; do
     case $opt in
         o) output_dir="$OPTARG" ;;
-        t) threads="$OPTARG" ;;
         *) usage ;;
     esac
 done
@@ -121,11 +118,9 @@ fi
 # Create output directory if it doesn't exist
 mkdir -p "$output_dir" || handle_error "Failed to create output directory $output_dir"
 
-# Export functions and variables for use in parallel
-export -f process_state resolve_county handle_error
-export urlbase output_dir
-
-# Use xargs to run process_state in parallel for each state
-printf "%s\n" "${states[@]}" | xargs -n 1 -P "$threads" -I {} bash -c 'process_state "$@"' _ {}
+# Process each state sequentially
+for st in "${states[@]}"; do
+    process_state "$st" "$output_dir"
+done
 
 echo "Processing complete."

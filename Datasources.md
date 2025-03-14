@@ -27,3 +27,10 @@ Here's a tabular overview of publicly available data sources that provide county
 4. **Granularity**: Some sources offer sub-county data (census tract, block group) that can be aggregated to county level.
 5. **Frequency limitations**: Some metrics are only updated during decennial census years or through 5-year ACS estimates.
 
+## Specific Datasets to consider
+
+### National Database of Childcare Prices (NDCP)
+https://apiprod.dol.gov/v4/get/WB/ndcp/csv/metadata?X-API-KEY=nKYXz0hVPpbqF7ewuJWI_zAiV9QssCEhSdioPlTnWVE
+
+### 
+

@@ -35,12 +35,12 @@ resolve_county() {
     elif [ -n "$address" ]; then
         # Use address to resolve county (requires geocoding API)
         echo "Address-based county resolution is not implemented in this script."
-        county=""
-        fips=""
+        county="N/A"
+        fips="N/A"
     else
         echo "No valid input provided for county resolution."
-        county=""
-        fips=""
+        county="N/A"
+        fips="N/A"
     fi
 
     echo "$county|$fips"
@@ -85,6 +85,12 @@ process_state() {
         lon=$(curl -s "$urlattr" | grep -oP '(?<=Longitude:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
         type=$(curl -s "$urlattr" | grep -oP '(?<=Type:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
         region=$(curl -s "$urlattr" | grep -oP '(?<=Region:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
+
+        # Replace empty fields with "N/A"
+        lat=${lat:-"N/A"}
+        lon=${lon:-"N/A"}
+        type=${type:-"N/A"}
+        region=${region:-"N/A"}
 
         # Resolve county and FIPS code
         county_fips=$(resolve_county "$lat" "$lon" "$addr")

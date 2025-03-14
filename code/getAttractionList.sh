@@ -58,11 +58,18 @@ process_state() {
     
     echo "Retrieving contents from : $urlstr"
     
+    # Use a unique temporary file for each state to avoid conflicts
+    temp_file="$output_dir/all_$st"
+    
     if [ ! -f "$ofile" ]; then
-        wget -q "$urlstr" -O all || handle_error "Failed to retrieve data from $urlstr"
-        grep "<li><span> <a href=" all | sed -e 's/^.*<strong>//g' -e 's/:<\/strong>//g' -e 's/<\/a>.*$//g' > "$ofile"
-        echo "Saved contents into $ofile"
-        rm -f all
+        wget -q "$urlstr" -O "$temp_file" || handle_error "Failed to retrieve data from $urlstr"
+        if [ -f "$temp_file" ]; then
+            grep "<li><span> <a href=" "$temp_file" | sed -e 's/^.*<strong>//g' -e 's/:<\/strong>//g' -e 's/<\/a>.*$//g' > "$ofile"
+            echo "Saved contents into $ofile"
+            rm -f "$temp_file"
+        else
+            handle_error "Failed to download data for state $st"
+        fi
     fi
 
     # Initialize details file with header
@@ -112,7 +119,7 @@ if ! command -v wget &> /dev/null || ! command -v curl &> /dev/null || ! command
 fi
 
 # Create output directory if it doesn't exist
-mkdir -p "$output_dir"
+mkdir -p "$output_dir" || handle_error "Failed to create output directory $output_dir"
 
 # Export functions and variables for use in parallel
 export -f process_state resolve_county handle_error

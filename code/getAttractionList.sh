@@ -1,5 +1,4 @@
 #!/bin/bash
-# apt-get install jq
 
 states=('AL' 'AK' 'AZ' 'AR' 'CA' 'CO' 'CT' 'DE' 'DC' 'FL' 'GA' 'HI' 'ID' 'IL' 
  'IN' 'IA' 'KS' 'KY' 'LA' 'ME' 'MD' 'MA' 'MI' 'MN' 'MS' 'MO' 'MT' 'NE' 'NV' 
@@ -10,10 +9,11 @@ urlbase='https://www.roadsideamerica.com/'
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 -o <output_directory>"
+    echo "Usage: $0 -o <output_directory> [-t <threads>]"
     echo "This script retrieves a list of attractions for each state and saves the details into a file."
     echo "Options:"
     echo "  -o <output_directory>  Specify the output directory for saving files."
+    echo "  -t <threads>           Number of threads to use for parallel processing (default: 1)."
     exit 1
 }
 
@@ -47,29 +47,11 @@ resolve_county() {
     echo "$county|$fips"
 }
 
-# Parse command-line arguments
-while getopts ":o:" opt; do
-    case $opt in
-        o) output_dir="$OPTARG" ;;
-        *) usage ;;
-    esac
-done
+# Function to process a single state
+process_state() {
+    local st="$1"
+    local output_dir="$2"
 
-# Check if output directory is provided
-if [ -z "$output_dir" ]; then
-    handle_error "Output directory not specified. Use -o to specify the output directory."
-fi
-
-# Check if wget, curl, and jq are installed
-if ! command -v wget &> /dev/null || ! command -v curl &> /dev/null || ! command -v jq &> /dev/null; then
-    handle_error "wget, curl, and jq are required to run this script."
-fi
-
-# Create output directory if it doesn't exist
-mkdir -p "$output_dir"
-
-# Obtain list of attractions for states
-for st in "${states[@]}"; do
     urlstr=$urlbase"/location/"${st,,}"/all"
     ofile="$output_dir/$st.txt"
     det="$output_dir/${st}_details.txt"
@@ -107,4 +89,36 @@ for st in "${states[@]}"; do
     done < "$ofile"
     
     echo "Details file generated $det"
+}
+
+# Parse command-line arguments
+threads=1
+while getopts ":o:t:" opt; do
+    case $opt in
+        o) output_dir="$OPTARG" ;;
+        t) threads="$OPTARG" ;;
+        *) usage ;;
+    esac
 done
+
+# Check if output directory is provided
+if [ -z "$output_dir" ]; then
+    handle_error "Output directory not specified. Use -o to specify the output directory."
+fi
+
+# Check if wget, curl, and jq are installed
+if ! command -v wget &> /dev/null || ! command -v curl &> /dev/null || ! command -v jq &> /dev/null; then
+    handle_error "wget, curl, and jq are required to run this script."
+fi
+
+# Create output directory if it doesn't exist
+mkdir -p "$output_dir"
+
+# Export functions and variables for use in parallel
+export -f process_state resolve_county handle_error
+export urlbase output_dir
+
+# Use xargs to run process_state in parallel for each state
+printf "%s\n" "${states[@]}" | xargs -n 1 -P "$threads" -I {} bash -c 'process_state "$@"' _ {}
+
+echo "Processing complete."

@@ -11,12 +11,21 @@ get_county() {
     else
         echo "Looking up county and coordinates for address: $input"
         
-        # Parse the address into components (street, city, state, ZIP)
-        street=$(echo "$input" | awk -F ',' '{print $1}' | sed 's/^ *//;s/ *$//')  # Extract street
-        city_state_zip=$(echo "$input" | awk -F ',' '{print $2}' | sed 's/^ *//;s/ *$//')  # Extract city, state, ZIP
-        city=$(echo "$city_state_zip" | awk '{print $1}')  # Extract city
-        state=$(echo "$city_state_zip" | awk '{print $2}')  # Extract state
-        zip=$(echo "$city_state_zip" | awk '{print $3}')  # Extract ZIP
+        # Parse the address into components
+        # First split by comma to get street vs the rest
+        street=$(echo "$input" | awk -F ',' '{print $1}' | sed 's/^ *//;s/ *$//')
+        
+        # Get the remaining parts (city, state, ZIP)
+        remainder=$(echo "$input" | cut -d ',' -f 2- | sed 's/^ *//;s/ *$//')
+        
+        # Extract city (second comma-separated value)
+        city=$(echo "$remainder" | awk -F ',' '{print $1}' | sed 's/^ *//;s/ *$//')
+        
+        # Extract state (third comma-separated value)
+        state=$(echo "$remainder" | awk -F ',' '{print $2}' | sed 's/^ *//;s/ *$//')
+        
+        # Extract ZIP (fourth comma-separated value, or last part)
+        zip=$(echo "$remainder" | awk -F ',' '{print $3}' | sed 's/^ *//;s/ *$//')
 
         # Debug: Print parsed address components
         echo "Debug - Parsed Address Components:"
@@ -82,4 +91,4 @@ if [[ -z "$1" ]]; then
 fi
 
 # Call the function with the input
-get_county "$1"
+get_county "$@"

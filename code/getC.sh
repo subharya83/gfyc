@@ -28,11 +28,11 @@ get_county() {
         zip=$(echo "$remainder" | awk -F ',' '{print $3}' | sed 's/^ *//;s/ *$//')
 
         # Debug: Print parsed address components
-        echo "Debug - Parsed Address Components:"
-        echo "Street: $street"
-        echo "City: $city"
-        echo "State: $state"
-        echo "ZIP: $zip"
+        #echo "Debug - Parsed Address Components:"
+        #echo "Street: $street"
+        #echo "City: $city"
+        #echo "State: $state"
+        #echo "ZIP: $zip"
 
         # URL encode the components
         encoded_street=$(echo "$street" | jq -sRr @uri)
@@ -41,27 +41,27 @@ get_county() {
         encoded_zip=$(echo "$zip" | jq -sRr @uri)
 
         # Debug: Print URL-encoded components
-        echo "Debug - URL-Encoded Components:"
-        echo "Encoded Street: $encoded_street"
-        echo "Encoded City: $encoded_city"
-        echo "Encoded State: $encoded_state"
-        echo "Encoded ZIP: $encoded_zip"
+        #echo "Debug - URL-Encoded Components:"
+        #echo "Encoded Street: $encoded_street"
+        #echo "Encoded City: $encoded_city"
+        #echo "Encoded State: $encoded_state"
+        #echo "Encoded ZIP: $encoded_zip"
 
         # Build the URL with structured address components
         url="https://geocoding.geo.census.gov/geocoder/locations/address?street=${encoded_street}&city=${encoded_city}&state=${encoded_state}&zip=${encoded_zip}&benchmark=Public_AR_Current&format=json"
 
         # Debug: Print the constructed API URL
-        echo "Debug - Constructed API URL:"
-        echo "$url"
+        #echo "Debug - Constructed API URL:"
+        #echo "$url"
     fi
 
     # Make the API request
-    echo "Debug - Making API request..."
+    #echo "Debug - Making API request..."
     response=$(curl -s "$url")
 
     # Debug: Print the raw API response
-    echo "Debug - Raw API Response:"
-    echo "$response" | jq
+    #echo "Debug - Raw API Response:"
+    #echo "$response" | jq
 
     # Extract the county name using jq (JSON processor)
     county=$(echo "$response" | jq -r '.result.addressMatches[0].geographies.Counties[0].NAME')
@@ -71,7 +71,7 @@ get_county() {
         lat=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.y')
         lon=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.x')
     fi
-
+    echo $lat $lon
     # Output results
     if [[ -z "$county" || "$county" == "null" ]]; then
         echo "No results found for the given input."

@@ -25,18 +25,18 @@ extract_attraction_info() {
     echo "\"$attraction_name\", \"$address\", \"$state\", \"$url\""
 }
 
-# Function to get latitude, longitude, and county from an address
+# Function to get latitude, longitude, and county from an address using Google Maps API
 get_geo_info() {
     local address="$1"
-    local api_key="YOUR_OPENCAGE_API_KEY"  # Replace with your OpenCage API key
+    local api_key="YOUR_GOOGLE_MAPS_API_KEY"  # Replace with your Google Maps API key
     local encoded_address=$(echo "$address" | jq -sRr @uri)  # URL-encode the address
-    local api_url="https://api.opencagedata.com/geocode/v1/json?q=$encoded_address&key=$api_key"
+    local api_url="https://maps.googleapis.com/maps/api/geocode/json?address=$encoded_address&key=$api_key"
 
     # Make the API call and parse the JSON response
     local response=$(curl -s "$api_url")
-    local latitude=$(echo "$response" | jq -r '.results[0].geometry.lat')
-    local longitude=$(echo "$response" | jq -r '.results[0].geometry.lng')
-    local county=$(echo "$response" | jq -r '.results[0].components.county')
+    local latitude=$(echo "$response" | jq -r '.results[0].geometry.location.lat')
+    local longitude=$(echo "$response" | jq -r '.results[0].geometry.location.lng')
+    local county=$(echo "$response" | jq -r '.results[0].address_components[] | select(.types[] == "administrative_area_level_2") | .long_name')
 
     # Output the information in CSV format
     echo "\"$address\", $latitude, $longitude, \"$county\""

@@ -15,8 +15,8 @@ extract_attraction_info() {
     # Extract the attraction name from the title tag
     local attraction_name=$(echo "$html_content" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - Roadside America//')
 
-    # Extract the address from the attractfacts div
-    local address=$(echo "$html_content" | grep -A 10 'class="attractfacts"' | grep -oP '(?<=<a href="/map/10613">)[^<]+')
+    # Extract the address from the attractfacts div using sed
+    local address=$(echo "$html_content" | sed -n '/class="attractfacts"/,/<\/div>/p' | grep -oP '(?<=<a href="/map/[0-9]+">)[^<]+')
 
     # Extract the state from the title (e.g., "Albertville, AL")
     local state=$(echo "$attraction_name" | grep -oP '[A-Z]{2}')
@@ -28,7 +28,7 @@ extract_attraction_info() {
 # Function to get latitude, longitude, county, and formatted address from an address using Google Maps API
 get_geo_info() {
     local address="$1"
-    local api_key="YOUR_GOOGLE_MAPS_API_KEY"  # Replace with your Google Maps API key
+    local api_key="AIzaSyCUfXqvurEH_EMMahJUoajN1tkR4HCdUDk"  # Replace with your Google Maps API key
     local encoded_address=$(echo "$address" | jq -sRr @uri)  # URL-encode the address
     local api_url="https://maps.googleapis.com/maps/api/geocode/json?address=$encoded_address&key=$api_key"
 
@@ -52,6 +52,10 @@ else
     address=$(echo "$_att" | awk -F'"' '{print $4}')
 
     # Get geo info for the address
-    _geo=$(get_geo_info "$address")
-    echo "$_att,$_geo"
+    if [ -n "$address" ]; then
+        _geo=$(get_geo_info "$address")
+        echo "$_att,$_geo"
+    else
+        echo "$_att,\"\", \"\", \"\", \"\""
+    fi
 fi

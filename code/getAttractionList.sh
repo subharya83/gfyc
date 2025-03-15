@@ -23,28 +23,65 @@ handle_error() {
     exit 1
 }
 
-# Function to resolve county name or FIPS code from latitude/longitude or address
-resolve_county() {
-    local lat="$1"
-    local lon="$2"
-    local address="$3"
+# Function to sanitize text by removing newlines and extra spaces
+sanitize() {
+    echo "$1" | tr -d '\n\r' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//'
+}
 
-    if [ -n "$lat" ] && [ -n "$lon" ]; then
-        # Use latitude and longitude to resolve county
-        county=$(curl -s "https://geo.fcc.gov/api/census/block/find?latitude=$lat&longitude=$lon&format=json" | jq -r '.County.name')
-        fips=$(curl -s "https://geo.fcc.gov/api/census/block/find?latitude=$lat&longitude=$lon&format=json" | jq -r '.County.FIPS')
-    elif [ -n "$address" ]; then
-        # Use address to resolve county (requires geocoding API)
-        echo "Address-based county resolution is not implemented in this script."
-        county=""
-        fips=""
-    else
-        echo "No valid input provided for county resolution."
-        county=""
-        fips=""
+# Function to extract attraction information
+extract_attraction_info() {
+    local url="$1"
+    local html_content=$(curl -s "$url")
+
+    # Extract the attraction name from the title tag
+    local attraction_name=$(echo "$html_content" | grep -o '<title>[^<]*' | sed 's/<title>//' | sed 's/ - Roadside America//')
+    attraction_name=$(sanitize "$attraction_name")
+
+    # Extract the address using a more robust method
+    local address=$(echo "$html_content" | grep -A3 '<dt>Address:</dt>' | grep -o '<a href="/map/[^>]*>[^<]*' | sed 's/.*">//')
+    
+    # If address is empty, try another method
+    if [ -z "$address" ]; then
+        address=$(echo "$html_content" | grep -A3 '<dt>Address:</dt>' | grep -o '<dd><a href="/map/[^>]*>[^<]*' | sed 's/.*">//')
+    fi
+    address=$(sanitize "$address")
+    # Output the information in CSV format
+    echo "\"$attraction_name\", \"$address\""
+}
+
+# Function to get latitude, longitude, county, formatted address, and FIPS code from an address using Google Maps API and FCC API
+get_geo_info() {
+    local address="$1"
+    local api_key="API"  # Replace with your Google Maps API key
+    local encoded_address=$(echo "$address" | jq -sRr @uri)  # URL-encode the address
+    local api_url="https://maps.googleapis.com/maps/api/geocode/json?address=$encoded_address&key=$api_key"
+
+    # Make the API call and parse the JSON response
+    local response=$(curl -s "$api_url")
+    local latitude=$(echo "$response" | jq -r '.results[0].geometry.location.lat')
+    latitude=$(sanitize "$latitude")
+    
+    local longitude=$(echo "$response" | jq -r '.results[0].geometry.location.lng')
+    longitude=$(sanitize "$longitude")
+    
+    local county=$(echo "$response" | jq -r '.results[0].address_components[] | select(.types[] == "administrative_area_level_2") | .long_name')
+    county=$(sanitize "$county")
+    
+    local formatted_address=$(echo "$response" | jq -r '.results[0].formatted_address')
+    formatted_address=$(sanitize "$formatted_address")
+
+    # Extract state from Google Maps API response
+    local state=$(echo "$response" | jq -r '.results[0].address_components[] | select(.types[] == "administrative_area_level_1") | .short_name')
+    state=$(sanitize "$state")
+
+    # Get FIPS code using FCC API
+    local fips_code=""
+    if [ -n "$latitude" ] && [ -n "$longitude" ]; then
+        fips_code=$(curl -s "https://geo.fcc.gov/api/census/block/find?latitude=$latitude&longitude=$longitude&format=json" | jq -r '.County.FIPS')
+        fips_code=$(sanitize "$fips_code")
     fi
 
-    echo "$county|$fips"
+    echo "\"$formatted_address\", \"$county\", \"$state\", \"$latitude\", \"$longitude\", \"$fips_code\""
 }
 
 # Parse command-line arguments
@@ -68,6 +105,10 @@ fi
 # Create output directory if it doesn't exist
 mkdir -p "$output_dir"
 
+# Initialize master CSV file with header
+master_csv="$output_dir/master_attractions.csv"
+echo "Attraction_name,Latitude,Longitude,County,Formatted_address,FIPS,URL" > "$master_csv"
+
 # Obtain list of attractions for states
 for st in "${states[@]}"; do
     urlstr=$urlbase"/location/"${st,,}"/all"
@@ -83,28 +124,26 @@ for st in "${states[@]}"; do
         rm -f all
     fi
 
-    # Initialize details file with header
-    echo "Attraction_name,Address,Latitude,Longitude,Type_of_attraction,Region,State,County,FIPS,URL" > "$det"
-
     # Navigate to attraction URL to find address, descriptions etc.
     while IFS="" read -r p || [ -n "$p" ]; do
         attr_suff=$(echo "$p" | sed -e 's/.*<a href="//g' -e 's/">.*//g')
-        urlattr=$urlbase$attr_suff
+        _att_url=$urlbase$attr_suff
+        
+        # Extract attraction info using the function from getAtrInfo.sh
+        _att=$(extract_attraction_info "$_att_url")
+        _att_name=$(echo "$_att" | awk -F'"' '{print $2}')
+        echo $_att_name
 
-        name=$(curl -s "$urlattr" | grep -oP '(?<=<h1>).*(?=</h1>)' | sed -e 's/\(.*\)<\/a>//g')
-        addr=$(curl -s "$urlattr" | grep -oP '(?<=Address:).*(?=</a></dd><dt>)' | rev | cut -d'>' -f1 | rev)
-        lat=$(curl -s "$urlattr" | grep -oP '(?<=Latitude:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
-        lon=$(curl -s "$urlattr" | grep -oP '(?<=Longitude:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
-        type=$(curl -s "$urlattr" | grep -oP '(?<=Type:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
-        region=$(curl -s "$urlattr" | grep -oP '(?<=Region:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
-
-        # Resolve county and FIPS code
-        county_fips=$(resolve_county "$lat" "$lon" "$addr")
-        county=$(echo "$county_fips" | cut -d'|' -f1)
-        fips=$(echo "$county_fips" | cut -d'|' -f2)
-
-        echo "\"$name\",\"$addr\",\"$lat\",\"$lon\",\"$type\",\"$region\",\"$st\",\"$county\",\"$fips\",\"$urlattr\"" | tee -a "$det"
+        _att_addr=$(echo "$_att" | awk -F'"' '{print $4}')
+        echo $_att_addr
+        
+        # Get geo info for the address using the function from getAtrInfo.sh
+        _geo=$(get_geo_info "$_att_addr")
+        # Append the combined information to the master CSV file
+        echo "$_att_name,$_geo,$_att_url" >> "$master_csv"
     done < "$ofile"
     
-    echo "Details file generated $det"
+    echo "Details for state $st have been added to $master_csv"
 done
+
+echo "All attraction details have been compiled into $master_csv"

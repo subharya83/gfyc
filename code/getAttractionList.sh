@@ -18,7 +18,7 @@ usage() {
 
 # Function to handle errors
 handle_error() {
-    echo "Error: $1"
+    echo "Error: $1" >&2
     exit 1
 }
 
@@ -32,8 +32,8 @@ get_county_from_coords() {
     local response=$(curl -s "$url")
     
     # Extract county info from response
-    local county_name=$(echo "$response" | jq -r '.result.geographies.Counties[0].NAME')
-    local county_fips=$(echo "$response" | jq -r '.result.geographies.Counties[0].GEOID')
+    local county_name=$(echo "$response" | jq -r '.result.geographies.Counties[0].NAME' 2>/dev/null)
+    local county_fips=$(echo "$response" | jq -r '.result.geographies.Counties[0].GEOID' 2>/dev/null)
     
     # Check if we got valid results
     if [[ -z "$county_name" || "$county_name" == "null" ]]; then
@@ -51,20 +51,17 @@ resolve_county() {
     local address="$3"
 
     if [ -n "$lat" ] && [ -n "$lon" ] && [ "$lat" != "N/A" ] && [ "$lon" != "N/A" ]; then
-        # Use latitude and longitude to resolve county using the improved function
+        # Use latitude and longitude to resolve county
         get_county_from_coords "$lat" "$lon"
     elif [ -n "$address" ] && [ "$address" != "N/A" ]; then
-        # Use address to geocode and then resolve county
-        echo "Geocoding address: $address"
-        
-        # Parse the address into components (simplified approach)
-        local encoded_address=$(echo "$address" | jq -sRr @uri)
+        # Simplified address processing to avoid debug output in CSV
+        local encoded_address=$(echo "$address" | tr -d '\n' | sed 's/ /%20/g')
         local url="https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encoded_address}&benchmark=Public_AR_Current&format=json"
         local response=$(curl -s "$url")
         
         # Extract coordinates
-        local lat=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.y')
-        local lon=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.x')
+        local lat=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.y' 2>/dev/null)
+        local lon=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.x' 2>/dev/null)
         
         if [[ -z "$lat" || "$lat" == "null" || -z "$lon" || "$lon" == "null" ]]; then
             echo "N/A|N/A"
@@ -77,6 +74,28 @@ resolve_county() {
     fi
 }
 
+# Function to extract HTML content with more reliable patterns
+extract_html_content() {
+    local html="$1"
+    local pattern="$2"
+    local default="N/A"
+    
+    result=$(echo "$html" | grep -oP "$pattern" | head -1 | sed -e 's/<[^>]*>//g' | tr -d '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    
+    if [ -z "$result" ]; then
+        echo "$default"
+    else
+        echo "$result"
+    fi
+}
+
+# Function to sanitize data for CSV
+sanitize_for_csv() {
+    local input="$1"
+    # Escape double quotes and wrap in quotes
+    echo "\"$(echo "$input" | sed 's/"/""/g')\""
+}
+
 # Function to process a single state
 process_state() {
     local st="$1"
@@ -86,7 +105,7 @@ process_state() {
     ofile="$output_dir/$st.txt"
     det="$output_dir/${st}_details.txt"
     
-    echo "Retrieving contents from : $urlstr"
+    echo "Retrieving contents from: $urlstr"
     
     # Use a unique temporary file for each state to avoid conflicts
     temp_file="$output_dir/all_$st"
@@ -112,16 +131,24 @@ process_state() {
 
         echo "Processing attraction: $urlattr"
         
-        # Extract attraction details
+        # Get the whole page content at once
         local attr_page=$(curl -s "$urlattr")
-        name=$(echo "$attr_page" | grep -oP '(?<=<h1>).*(?=</h1>)' | sed -e 's/\(.*\)<\/a>//g')
-        addr=$(echo "$attr_page" | grep -oP '(?<=Address:).*(?=</a></dd><dt>)' | rev | cut -d'>' -f1 | rev)
-        lat=$(echo "$attr_page" | grep -oP '(?<=Latitude:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
-        lon=$(echo "$attr_page" | grep -oP '(?<=Longitude:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
-        type=$(echo "$attr_page" | grep -oP '(?<=Type:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
-        region=$(echo "$attr_page" | grep -oP '(?<=Region:).*(?=</dd><dt>)' | rev | cut -d'>' -f1 | rev)
+        
+        # Extract data with more reliable patterns
+        name=$(extract_html_content "$attr_page" '(?<=<h1>).*?(?=</h1>)' | sed -e 's/<[^>]*>//g')
+        
+        # Extract address from the details section
+        addr=$(extract_html_content "$attr_page" '(?s)<dt>Address:</dt>\s*<dd>.*?</dd>' | sed -e 's/<dt>Address:<\/dt>//g' -e 's/<dd>//g' -e 's/<\/dd>//g' -e 's/<a[^>]*>//g' -e 's/<\/a>//g')
+        
+        # Extract latitude and longitude
+        lat=$(extract_html_content "$attr_page" '(?s)<dt>Latitude:</dt>\s*<dd>.*?</dd>' | sed -e 's/<dt>Latitude:<\/dt>//g' -e 's/<dd>//g' -e 's/<\/dd>//g')
+        lon=$(extract_html_content "$attr_page" '(?s)<dt>Longitude:</dt>\s*<dd>.*?</dd>' | sed -e 's/<dt>Longitude:<\/dt>//g' -e 's/<dd>//g' -e 's/<\/dd>//g')
+        
+        # Extract type and region
+        type=$(extract_html_content "$attr_page" '(?s)<dt>Type:</dt>\s*<dd>.*?</dd>' | sed -e 's/<dt>Type:<\/dt>//g' -e 's/<dd>//g' -e 's/<\/dd>//g')
+        region=$(extract_html_content "$attr_page" '(?s)<dt>Region:</dt>\s*<dd>.*?</dd>' | sed -e 's/<dt>Region:<\/dt>//g' -e 's/<dd>//g' -e 's/<\/dd>//g')
 
-        # Replace empty fields with "N/A"
+        # Default values if not found
         name=${name:-"N/A"}
         addr=${addr:-"N/A"}
         lat=${lat:-"N/A"}
@@ -129,16 +156,29 @@ process_state() {
         type=${type:-"N/A"}
         region=${region:-"N/A"}
 
-        # Resolve county and FIPS code using improved function
-        county_fips=$(resolve_county "$lat" "$lon" "$addr")
-        county=$(echo "$county_fips" | cut -d'|' -f1)
-        fips=$(echo "$county_fips" | cut -d'|' -f2)
+        # Get county info silently (suppress debug output)
+        county_info=$(resolve_county "$lat" "$lon" "$addr" 2>/dev/null)
+        county=$(echo "$county_info" | cut -d'|' -f1)
+        fips=$(echo "$county_info" | cut -d'|' -f2)
+
+        # Sanitize all fields for CSV output
+        name_csv=$(sanitize_for_csv "$name")
+        addr_csv=$(sanitize_for_csv "$addr")
+        lat_csv=$(sanitize_for_csv "$lat")
+        lon_csv=$(sanitize_for_csv "$lon")
+        type_csv=$(sanitize_for_csv "$type")
+        region_csv=$(sanitize_for_csv "$region")
+        county_csv=$(sanitize_for_csv "$county")
+        fips_csv=$(sanitize_for_csv "$fips")
+        url_csv=$(sanitize_for_csv "$urlattr")
 
         echo "  - Name: $name"
+        echo "  - Address: $addr"
         echo "  - Coords: $lat, $lon"
         echo "  - County: $county (FIPS: $fips)"
         
-        echo "\"$name\",\"$addr\",\"$lat\",\"$lon\",\"$type\",\"$region\",\"$st\",\"$county\",\"$fips\",\"$urlattr\"" >> "$det"
+        # Write to CSV file with proper formatting
+        echo "$name_csv,$addr_csv,$lat_csv,$lon_csv,$type_csv,$region_csv,\"$st\",$county_csv,$fips_csv,$url_csv" >> "$det"
     done < "$ofile"
     
     echo "Details file generated: $det"

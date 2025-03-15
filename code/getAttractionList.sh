@@ -10,10 +10,11 @@ urlbase='https://www.roadsideamerica.com/'
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 -o <output_directory>"
+    echo "Usage: $0 -o <output_directory> [-t <threads>]"
     echo "This script retrieves a list of attractions for each state and saves the details into a file."
     echo "Options:"
     echo "  -o <output_directory>  Specify the output directory for saving files."
+    echo "  -t <threads>           Specify the number of threads to use for parallel processing."
     exit 1
 }
 
@@ -52,7 +53,7 @@ extract_attraction_info() {
 # Function to get latitude, longitude, county, formatted address, and FIPS code from an address using Google Maps API and FCC API
 get_geo_info() {
     local address="$1"
-    local api_key="API"  # Replace with your Google Maps API key
+    local api_key="AIzaSyCUfXqvurEH_EMMahJUoajN1tkR4HCdUDk"  # Replace with your Google Maps API key
     local encoded_address=$(echo "$address" | jq -sRr @uri)  # URL-encode the address
     local api_url="https://maps.googleapis.com/maps/api/geocode/json?address=$encoded_address&key=$api_key"
 
@@ -89,36 +90,13 @@ get_geo_info() {
     echo "\"$place_id\", \"$formatted_address\", \"$county\", \"$state\", \"$latitude\", \"$longitude\", \"$fips_code\", \"$global_code\""
 }
 
-# Parse command-line arguments
-while getopts ":o:" opt; do
-    case $opt in
-        o) output_dir="$OPTARG" ;;
-        *) usage ;;
-    esac
-done
-
-# Check if output directory is provided
-if [ -z "$output_dir" ]; then
-    handle_error "Output directory not specified. Use -o to specify the output directory."
-fi
-
-# Check if wget, curl, and jq are installed
-if ! command -v wget &> /dev/null || ! command -v curl &> /dev/null || ! command -v jq &> /dev/null; then
-    handle_error "wget, curl, and jq are required to run this script."
-fi
-
-# Create output directory if it doesn't exist
-mkdir -p "$output_dir"
-
-# Initialize master CSV file with header
-master_csv="$output_dir/master_attractions.csv"
-echo "Attraction_name,Place_id,Latitude,Longitude,County,Formatted_address,FIPS,Global_code,URL" > "$master_csv"
-
-# Obtain list of attractions for states
-for st in "${states[@]}"; do
-    urlstr=$urlbase"/location/"${st,,}"/all"
-    ofile="$output_dir/$st.txt"
-    det="$output_dir/${st}_details.txt"
+# Function to process a single state
+process_state() {
+    local st="$1"
+    local output_dir="$2"
+    local urlstr=$urlbase"/location/"${st,,}"/all"
+    local ofile="$output_dir/$st.txt"
+    local det="$output_dir/${st}_details.txt"
     
     echo "Retrieving contents from : $urlstr"
     
@@ -146,10 +124,49 @@ for st in "${states[@]}"; do
         _geo=$(get_geo_info "$_att_addr")
         
         # Append the combined information to the master CSV file
-        echo "\"$_att_name\",$_geo,\"$_att_url\"" >> "$master_csv"
+        echo "\"$_att_name\",$_geo,\"$_att_url\"" >> "$output_dir/master_attractions.csv"
     done < "$ofile"
     
-    echo "Details for state $st have been added to $master_csv"
+    echo "Details for state $st have been added to $output_dir/master_attractions.csv"
+}
+
+# Parse command-line arguments
+while getopts ":o:t:" opt; do
+    case $opt in
+        o) output_dir="$OPTARG" ;;
+        t) threads="$OPTARG" ;;
+        *) usage ;;
+    esac
 done
+
+# Check if output directory is provided
+if [ -z "$output_dir" ]; then
+    handle_error "Output directory not specified. Use -o to specify the output directory."
+fi
+
+# Check if wget, curl, and jq are installed
+if ! command -v wget &> /dev/null || ! command -v curl &> /dev/null || ! command -v jq &> /dev/null; then
+    handle_error "wget, curl, and jq are required to run this script."
+fi
+
+# Create output directory if it doesn't exist
+mkdir -p "$output_dir"
+
+# Initialize master CSV file with header
+master_csv="$output_dir/master_attractions.csv"
+echo "Attraction_name,Place_id,Latitude,Longitude,County,Formatted_address,FIPS,Global_code,URL" > "$master_csv"
+
+# Process states in parallel if threads are specified
+if [ -n "$threads" ]; then
+    export -f process_state extract_attraction_info get_geo_info sanitize handle_error
+    export urlbase output_dir
+    printf "%s\n" "${states[@]}" | xargs -I{} -P "$threads" bash -c 'process_state "$@"' _ {}
+else
+    # Process states sequentially
+    for st in "${states[@]}"; do
+        echo "Processing $st"
+        process_state "$st" "$output_dir"
+    done
+fi
 
 echo "All attraction details have been compiled into $master_csv"

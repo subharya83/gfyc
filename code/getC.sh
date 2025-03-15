@@ -4,17 +4,8 @@
 get_county_from_coords() {
     lat="$1"
     lon="$2"
-    
-    echo "Looking up county for coordinates: Latitude $lat, Longitude $lon"
-    
     # Build URL for Census Bureau Geocoding Services API (reverse geocoding)
     url="https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x=${lon}&y=${lat}&benchmark=Public_AR_Current&vintage=Current_Current&format=json"
-    
-    echo "Debug - Constructed API URL:"
-    echo "$url"
-    
-    # Make the API request
-    echo "Debug - Making API request..."
     response=$(curl -s "$url")
     
     # Extract county info from response
@@ -43,7 +34,6 @@ get_county() {
     
     # Check if the input is a ZIP code (5 digits)
     if [[ $input =~ ^[0-9]{5}$ ]]; then
-        echo "Looking up county for ZIP code: $input"
         url="https://geocoding.geo.census.gov/geocoder/locations/address?zip=${input}&benchmark=Public_AR_Current&format=json"
         
         # Make the API request
@@ -57,9 +47,6 @@ get_county() {
             echo "Could not get coordinates for ZIP code $input."
             return 1
         fi
-        
-        echo "Coordinates found - Latitude: $lat, Longitude: $lon"
-        
         # Get county from coordinates
         get_county_from_coords "$lat" "$lon"
         
@@ -82,13 +69,6 @@ get_county() {
         # Extract ZIP (fourth comma-separated value, or last part)
         zip=$(echo "$remainder" | awk -F ',' '{print $3}' | sed 's/^ *//;s/ *$//')
 
-        # Debug: Print parsed address components
-        echo "Debug - Parsed Address Components:"
-        echo "Street: $street"
-        echo "City: $city"
-        echo "State: $state"
-        echo "ZIP: $zip"
-
         # URL encode the components
         encoded_street=$(echo "$street" | jq -sRr @uri)
         encoded_city=$(echo "$city" | jq -sRr @uri)
@@ -97,13 +77,6 @@ get_county() {
 
         # Build the URL with structured address components
         url="https://geocoding.geo.census.gov/geocoder/locations/address?street=${encoded_street}&city=${encoded_city}&state=${encoded_state}&zip=${encoded_zip}&benchmark=Public_AR_Current&format=json"
-
-        # Debug: Print the constructed API URL
-        echo "Debug - Constructed API URL:"
-        echo "$url"
-        
-        # Make the API request
-        echo "Debug - Making API request..."
         response=$(curl -s "$url")
         
         # Extract coordinates

@@ -38,10 +38,10 @@ extract_attraction_info() {
     echo "\"$attraction_name\", \"$address\", \"$state\", \"$url\""
 }
 
-# Function to get latitude, longitude, county, and formatted address from an address using Google Maps API
+# Function to get latitude, longitude, county, formatted address, and FIPS code from an address using Google Maps API and FCC API
 get_geo_info() {
     local address="$1"
-    local api_key="API_KEY"  # Replace with your Google Maps API key
+    local api_key="API"  # Replace with your Google Maps API key
     local encoded_address=$(echo "$address" | jq -sRr @uri)  # URL-encode the address
     local api_url="https://maps.googleapis.com/maps/api/geocode/json?address=$encoded_address&key=$api_key"
 
@@ -59,7 +59,18 @@ get_geo_info() {
     local formatted_address=$(echo "$response" | jq -r '.results[0].formatted_address')
     formatted_address=$(sanitize "$formatted_address")
 
-    echo "\"$latitude\", \"$longitude\", \"$county\", \"$formatted_address\""
+    # Extract state from Google Maps API response
+    local state=$(echo "$response" | jq -r '.results[0].address_components[] | select(.types[] == "administrative_area_level_1") | .short_name')
+    state=$(sanitize "$state")
+
+    # Get FIPS code using FCC API
+    local fips_code=""
+    if [ -n "$latitude" ] && [ -n "$longitude" ]; then
+        fips_code=$(curl -s "https://geo.fcc.gov/api/census/block/find?latitude=$latitude&longitude=$longitude&format=json" | jq -r '.County.FIPS')
+        fips_code=$(sanitize "$fips_code")
+    fi
+
+    echo "\"$latitude\", \"$longitude\", \"$county\", \"$formatted_address\", \"$state\", \"$fips_code\""
 }
 
 # Main script logic
@@ -76,6 +87,6 @@ else
         _geo=$(get_geo_info "$address")
         echo "$_att,$_geo"
     else
-        echo "$_att,\"\", \"\", \"\", \"\""
+        echo "$_att,\"\", \"\", \"\", \"\", \"\", \"\""
     fi
 fi

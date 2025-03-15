@@ -53,7 +53,7 @@ extract_attraction_info() {
 # Function to get latitude, longitude, county, formatted address, and FIPS code from an address using Google Maps API and FCC API
 get_geo_info() {
     local address="$1"
-    local api_key="AIzaSyCUfXqvurEH_EMMahJUoajN1tkR4HCdUDk"  # Replace with your Google Maps API key
+    local api_key="API"  # Replace with your Google Maps API key
     local encoded_address=$(echo "$address" | jq -sRr @uri)  # URL-encode the address
     local api_url="https://maps.googleapis.com/maps/api/geocode/json?address=$encoded_address&key=$api_key"
 
@@ -107,6 +107,9 @@ process_state() {
         rm -f all
     fi
 
+    # Create a temporary file for this state's attractions
+    local temp_file="$output_dir/${st}_temp.csv"
+
     # Navigate to attraction URL to find address, descriptions etc.
     while IFS="" read -r p || [ -n "$p" ]; do
         attr_suff=$(echo "$p" | sed -e 's/.*<a href="//g' -e 's/">.*//g')
@@ -123,11 +126,11 @@ process_state() {
         # Get geo info for the address using the function from getAtrInfo.sh
         _geo=$(get_geo_info "$_att_addr")
         
-        # Append the combined information to the master CSV file
-        echo "\"$_att_name\",$_geo,\"$_att_url\"" >> "$output_dir/master_attractions.csv"
+        # Append the combined information to the temporary CSV file
+        echo "\"$_att_name\",$_geo,\"$_att_url\"" >> "$temp_file"
     done < "$ofile"
     
-    echo "Details for state $st have been added to $output_dir/master_attractions.csv"
+    echo "Details for state $st have been added to $temp_file"
 }
 
 # Parse command-line arguments
@@ -161,10 +164,18 @@ if [ -n "$threads" ]; then
     export -f process_state extract_attraction_info get_geo_info sanitize handle_error
     export urlbase output_dir
     printf "%s\n" "${states[@]}" | xargs -I{} -P "$threads" bash -c 'process_state "$@"' _ {}
+    
+    # Merge all temporary files into the master CSV file
+    for st in "${states[@]}"; do
+        temp_file="$output_dir/${st}_temp.csv"
+        if [ -f "$temp_file" ]; then
+            cat "$temp_file" >> "$master_csv"
+            rm -f "$temp_file"
+        fi
+    done
 else
     # Process states sequentially
     for st in "${states[@]}"; do
-        echo "Processing $st"
         process_state "$st" "$output_dir"
     done
 fi

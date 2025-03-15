@@ -1,6 +1,43 @@
 #!/bin/bash
 
-# Function to get county name and optionally latitude/longitude
+# Function to get county name and FIPS code from latitude and longitude
+get_county_from_coords() {
+    lat="$1"
+    lon="$2"
+    
+    echo "Looking up county for coordinates: Latitude $lat, Longitude $lon"
+    
+    # Build URL for Census Bureau Geocoding Services API (reverse geocoding)
+    url="https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x=${lon}&y=${lat}&benchmark=Public_AR_Current&vintage=Current_Current&format=json"
+    
+    echo "Debug - Constructed API URL:"
+    echo "$url"
+    
+    # Make the API request
+    echo "Debug - Making API request..."
+    response=$(curl -s "$url")
+    
+    # Extract county info from response
+    county_name=$(echo "$response" | jq -r '.result.geographies.Counties[0].NAME')
+    county_fips=$(echo "$response" | jq -r '.result.geographies.Counties[0].GEOID')
+    state_name=$(echo "$response" | jq -r '.result.geographies.States[0].NAME')
+    state_fips=$(echo "$response" | jq -r '.result.geographies.States[0].GEOID')
+    
+    # Check if we got valid results
+    if [[ -z "$county_name" || "$county_name" == "null" ]]; then
+        echo "No county found for the given coordinates."
+        return 1
+    else
+        # Output the results
+        echo "County: $county_name"
+        echo "County FIPS: $county_fips"
+        echo "State: $state_name"
+        echo "State FIPS: $state_fips"
+        return 0
+    fi
+}
+
+# Updated get_county function to use coordinates when available
 get_county() {
     input="$1"
     
@@ -8,6 +45,24 @@ get_county() {
     if [[ $input =~ ^[0-9]{5}$ ]]; then
         echo "Looking up county for ZIP code: $input"
         url="https://geocoding.geo.census.gov/geocoder/locations/address?zip=${input}&benchmark=Public_AR_Current&format=json"
+        
+        # Make the API request
+        response=$(curl -s "$url")
+        
+        # Extract coordinates
+        lat=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.y')
+        lon=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.x')
+        
+        if [[ -z "$lat" || "$lat" == "null" || -z "$lon" || "$lon" == "null" ]]; then
+            echo "Could not get coordinates for ZIP code $input."
+            return 1
+        fi
+        
+        echo "Coordinates found - Latitude: $lat, Longitude: $lon"
+        
+        # Get county from coordinates
+        get_county_from_coords "$lat" "$lon"
+        
     else
         echo "Looking up county and coordinates for address: $input"
         
@@ -28,11 +83,11 @@ get_county() {
         zip=$(echo "$remainder" | awk -F ',' '{print $3}' | sed 's/^ *//;s/ *$//')
 
         # Debug: Print parsed address components
-        #echo "Debug - Parsed Address Components:"
-        #echo "Street: $street"
-        #echo "City: $city"
-        #echo "State: $state"
-        #echo "ZIP: $zip"
+        echo "Debug - Parsed Address Components:"
+        echo "Street: $street"
+        echo "City: $city"
+        echo "State: $state"
+        echo "ZIP: $zip"
 
         # URL encode the components
         encoded_street=$(echo "$street" | jq -sRr @uri)
@@ -40,55 +95,55 @@ get_county() {
         encoded_state=$(echo "$state" | jq -sRr @uri)
         encoded_zip=$(echo "$zip" | jq -sRr @uri)
 
-        # Debug: Print URL-encoded components
-        #echo "Debug - URL-Encoded Components:"
-        #echo "Encoded Street: $encoded_street"
-        #echo "Encoded City: $encoded_city"
-        #echo "Encoded State: $encoded_state"
-        #echo "Encoded ZIP: $encoded_zip"
-
         # Build the URL with structured address components
         url="https://geocoding.geo.census.gov/geocoder/locations/address?street=${encoded_street}&city=${encoded_city}&state=${encoded_state}&zip=${encoded_zip}&benchmark=Public_AR_Current&format=json"
 
         # Debug: Print the constructed API URL
-        #echo "Debug - Constructed API URL:"
-        #echo "$url"
-    fi
-
-    # Make the API request
-    #echo "Debug - Making API request..."
-    response=$(curl -s "$url")
-
-    # Debug: Print the raw API response
-    #echo "Debug - Raw API Response:"
-    #echo "$response" | jq
-
-    # Extract the county name using jq (JSON processor)
-    county=$(echo "$response" | jq -r '.result.addressMatches[0].geographies.Counties[0].NAME')
-
-    # Extract latitude and longitude if address is provided
-    if [[ ! $input =~ ^[0-9]{5}$ ]]; then
+        echo "Debug - Constructed API URL:"
+        echo "$url"
+        
+        # Make the API request
+        echo "Debug - Making API request..."
+        response=$(curl -s "$url")
+        
+        # Extract coordinates
         lat=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.y')
         lon=$(echo "$response" | jq -r '.result.addressMatches[0].coordinates.x')
-    fi
-    echo $lat $lon
-    # Output results
-    if [[ -z "$county" || "$county" == "null" ]]; then
-        echo "No results found for the given input."
-    else
-        echo "County: $county"
-        if [[ ! $input =~ ^[0-9]{5}$ ]]; then
-            echo "Latitude: $lat"
-            echo "Longitude: $lon"
+        
+        if [[ -z "$lat" || "$lat" == "null" || -z "$lon" || "$lon" == "null" ]]; then
+            echo "Could not get coordinates for address: $input"
+            return 1
         fi
+        
+        echo "Coordinates found - Latitude: $lat, Longitude: $lon"
+        
+        # Get county from coordinates
+        get_county_from_coords "$lat" "$lon"
     fi
 }
 
+# Standalone function to be called directly with coordinates
+get_county_info() {
+    if [[ $# -lt 2 ]]; then
+        echo "Usage: get_county_info <latitude> <longitude>"
+        return 1
+    fi
+    
+    get_county_from_coords "$1" "$2"
+}
+
 # Check if input is provided
-if [[ -z "$1" ]]; then
+if [[ $# -eq 0 ]]; then
     echo "Usage: $0 <ZIP code or address>"
+    echo "   OR: $0 --coords <latitude> <longitude>"
     exit 1
 fi
 
-# Call the function with the input
-get_county "$@"
+# Parse command line arguments
+if [[ "$1" == "--coords" && $# -eq 3 ]]; then
+    # Use coordinates directly
+    get_county_from_coords "$2" "$3"
+else
+    # Use address or ZIP code
+    get_county "$*"
+fi

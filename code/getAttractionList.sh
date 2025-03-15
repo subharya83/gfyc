@@ -58,6 +58,7 @@ get_geo_info() {
 
     # Make the API call and parse the JSON response
     local response=$(curl -s "$api_url")
+
     local latitude=$(echo "$response" | jq -r '.results[0].geometry.location.lat')
     latitude=$(sanitize "$latitude")
     
@@ -80,8 +81,12 @@ get_geo_info() {
         fips_code=$(curl -s "https://geo.fcc.gov/api/census/block/find?latitude=$latitude&longitude=$longitude&format=json" | jq -r '.County.FIPS')
         fips_code=$(sanitize "$fips_code")
     fi
+    # Get unique PlaceID
+    local place_id=$(echo "$response" | jq -r '.results[0].place_id')
+    # Get global Plus code
+    local global_code=$(echo "$response" | jq -r '.results[0].plus_code.global_code')
 
-    echo "\"$formatted_address\", \"$county\", \"$state\", \"$latitude\", \"$longitude\", \"$fips_code\""
+    echo "\"$place_id\", \"$formatted_address\", \"$county\", \"$state\", \"$latitude\", \"$longitude\", \"$fips_code\", \"$global_code\""
 }
 
 # Parse command-line arguments
@@ -107,7 +112,7 @@ mkdir -p "$output_dir"
 
 # Initialize master CSV file with header
 master_csv="$output_dir/master_attractions.csv"
-echo "Attraction_name,Latitude,Longitude,County,Formatted_address,FIPS,URL" > "$master_csv"
+echo "Attraction_name,Place_id,Latitude,Longitude,County,Formatted_address,FIPS,Global_code,URL" > "$master_csv"
 
 # Obtain list of attractions for states
 for st in "${states[@]}"; do
@@ -139,8 +144,9 @@ for st in "${states[@]}"; do
         
         # Get geo info for the address using the function from getAtrInfo.sh
         _geo=$(get_geo_info "$_att_addr")
+        
         # Append the combined information to the master CSV file
-        echo "$_att_name,$_geo,$_att_url" >> "$master_csv"
+        echo "\"$_att_name\",$_geo,\"$_att_url\"" >> "$master_csv"
     done < "$ofile"
     
     echo "Details for state $st have been added to $master_csv"

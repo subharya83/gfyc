@@ -37,9 +37,7 @@ get_geo_info() {
     local latitude=$(echo "$response" | jq -r '.results[0].geometry.location.lat')
     local longitude=$(echo "$response" | jq -r '.results[0].geometry.location.lng')
     local county=$(echo "$response" | jq -r '.results[0].address_components[] | select(.types[] == "administrative_area_level_2") | .long_name')
-
-    # Output the information in CSV format
-    echo "\"$address\", $latitude, $longitude, \"$county\""
+    echo "\"$latitude\", \"$longitude\", \"$county\""
 }
 
 # Main script logic
@@ -47,14 +45,11 @@ if [ $# -eq 0 ]; then
     usage
 else
     # Extract attraction info
-    attraction_info=$(extract_attraction_info "$1")
-    echo "$attraction_info"
-
+    _att=$(extract_attraction_info "$1")
     # Extract address from the attraction info
-    address=$(echo "$attraction_info" | awk -F'"' '{print $4}')
+    address=$(echo "$_att" | awk -F'"' '{print $4}')
 
     # Get geo info for the address
-    geo_info=$(get_geo_info "$address")
-    echo "\"Address\", \"Latitude\", \"Longitude\", \"County\""
-    echo "$geo_info"
+    _geo=$(get_geo_info "$address")
+    echo "$_att,$_geo"
 fi

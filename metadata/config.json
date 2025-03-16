@@ -2,33 +2,23 @@
     "census": {
         "url": "https://api.census.gov/data/{year}/acs/acs5",
         "params": {
-            "get": "NAME,B01001_001E,B19013_001E,B25077_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E",
+            "get": "NAME,B01001_001E,B01002_001E",
             "for": "county:{county}",
-            "in": "state:{state}",
-            "key": "YOUR_CENSUS_API_KEY"
+            "in": "state:{state}"
         },
         "columns": {
-            "B01001_001E": "population",
-            "B19013_001E": "median_household_income",
-            "B25077_001E": "median_home_value",
-            "B15003_022E": "bachelors_degree",
-            "B15003_023E": "masters_degree",
-            "B15003_024E": "professional_degree",
-            "B15003_025E": "doctorate_degree"
+            "B01001_001E": "total_population",
+            "B01002_001E": "median_age"
         }
     },
     "bls": {
         "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/",
         "params": {
-            "registrationkey": "",
-            "seriesid": [],
-            "startyear": "{start_year}",
-            "endyear": "{end_year}"
+            "registrationkey": "your_api_key_here"
         },
-        "series_template": "LAUCN{fips}00000000{data_type}"
+        "series_template": "LAUCN{fips}{data_type}"
     },
     "zillow": {
-        "url": "https://www.zillow.com/research/data/",
         "direct_download": "https://files.zillowstatic.com/research/public_csvs/zhvi/County_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
     },
     "noaa": {
@@ -36,31 +26,19 @@
         "params": {
             "datasetid": "GHCND",
             "locationid": "FIPS:{fips}",
-            "startdate": "{start_date}",
-            "enddate": "{end_date}",
-            "limit": 1000,
-            "datatypeid": "TAVG,TMIN,TMAX,PRCP",
-            "units": "standard"
+            "startdate": "YYYY-MM-DD",
+            "enddate": "YYYY-MM-DD",
+            "limit": 1000
         },
         "headers": {
-            "token": "YOUR_NOAA_TOKEN"
+            "token": "your_noaa_token_here"
         }
     },
     "fred": {
-        "url": "https://api.stlouisfed.org/fred/county/data",
+        "url": "https://api.stlouisfed.org/fred/series/observations",
         "params": {
-            "county_fips": "{fips}",
-            "api_key": "YOUR_FRED_API_KEY",
-            "file_type": "json",
-            "frequency": "m",
-            "series_group": "income,housing,employment"
+            "api_key": "your_fred_api_key_here",
+            "file_type": "json"
         }
-    },
-    "db": {
-        "dbname": "your_dbname",
-        "user": "your_username",
-        "password": "your_password",
-        "host": "your_host",
-        "port": "your_port"
     }
 }

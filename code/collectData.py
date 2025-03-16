@@ -358,6 +358,52 @@ def fetch_fred_data(counties, start_date, end_date):
         return df_wide
     return None
 
+def fetch_all_data(counties, start_date, end_date, config):
+    """Fetch data from all sources and save results to CSV files."""
+    results = {}
+    
+    # Fetch Census data
+    census_df = fetch_census_data(counties, start_date.year, config)
+    if census_df is not None:
+        save_to_csv(census_df, "census_data.csv", mode="w")
+        results["Census"] = True
+    else:
+        results["Census"] = False
+    
+    # Fetch BLS data
+    bls_df = fetch_bls_data(counties, start_date, end_date)
+    if bls_df is not None:
+        save_to_csv(bls_df, "bls_data.csv", mode="w")
+        results["BLS"] = True
+    else:
+        results["BLS"] = False
+    
+    # Fetch Zillow data
+    zillow_df = fetch_zillow_data(counties, start_date, end_date)
+    if zillow_df is not None:
+        save_to_csv(zillow_df, "zillow_data.csv", mode="w")
+        results["Zillow"] = True
+    else:
+        results["Zillow"] = False
+    
+    # Fetch NOAA data
+    noaa_df = fetch_noaa_data(counties, start_date, end_date)
+    if noaa_df is not None:
+        save_to_csv(noaa_df, "noaa_data.csv", mode="w")
+        results["NOAA"] = True
+    else:
+        results["NOAA"] = False
+    
+    # Fetch FRED data
+    fred_df = fetch_fred_data(counties, start_date, end_date)
+    if fred_df is not None:
+        save_to_csv(fred_df, "fred_data.csv", mode="w")
+        results["FRED"] = True
+    else:
+        results["FRED"] = False
+    
+    return results
+
 def save_to_csv(df, filename, mode="w"):
     """Save DataFrame to CSV file."""
     if df is None or df.empty:

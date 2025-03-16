@@ -53,7 +53,7 @@ extract_attraction_info() {
 # Function to get latitude, longitude, county, formatted address, and FIPS code from an address using Google Maps API and FCC API
 get_geo_info() {
     local address="$1"
-    local api_key="API"  # Replace with your Google Maps API key
+    local api_key="AIzaSyCUfXqvurEH_EMMahJUoajN1tkR4HCdUDk"  # Replace with your Google Maps API key
     local encoded_address=$(echo "$address" | jq -sRr @uri)  # URL-encode the address
     local api_url="https://maps.googleapis.com/maps/api/geocode/json?address=$encoded_address&key=$api_key"
 
@@ -90,6 +90,32 @@ get_geo_info() {
     echo "\"$place_id\", \"$formatted_address\", \"$county\", \"$state\", \"$latitude\", \"$longitude\", \"$fips_code\", \"$global_code\""
 }
 
+# Function to check and resume from the last processed record
+check_and_resume() {
+    local st="$1"
+    local output_dir="$2"
+    local master_csv="$output_dir/master_attractions.csv"
+    local temp_file="$output_dir/${st}_temp.csv"
+    local ofile="$output_dir/$st.txt"
+
+    # Check if the master CSV file exists
+    if [ -f "$master_csv" ]; then
+        # Extract the last processed attraction name for the state
+        last_processed_attraction=$(grep "\",\"$st\"" "$master_csv" | tail -n 1 | awk -F'"' '{print $2}')
+        
+        if [ -n "$last_processed_attraction" ]; then
+            echo "Resuming from the last processed attraction: $last_processed_attraction"
+            # Find the line number of the last processed attraction in the state file
+            resume_line=$(grep -n "$last_processed_attraction" "$ofile" | cut -d: -f1)
+            if [ -n "$resume_line" ]; then
+                # Skip already processed attractions
+                tail -n +$((resume_line + 1)) "$ofile" > "$ofile.tmp"
+                mv "$ofile.tmp" "$ofile"
+            fi
+        fi
+    fi
+}
+
 # Function to process a single state
 process_state() {
     local st="$1"
@@ -106,6 +132,9 @@ process_state() {
         echo "Saved contents into $ofile"
         rm -f all
     fi
+
+    # Check and resume from the last processed record
+    check_and_resume "$st" "$output_dir"
 
     # Create a temporary file for this state's attractions
     local temp_file="$output_dir/${st}_temp.csv"
@@ -157,11 +186,13 @@ mkdir -p "$output_dir"
 
 # Initialize master CSV file with header
 master_csv="$output_dir/master_attractions.csv"
-echo "Attraction_name,Place_id,Latitude,Longitude,County,Formatted_address,FIPS,Global_code,URL" > "$master_csv"
+if [ ! -f "$master_csv" ]; then
+    echo "Attraction_name,Place_id,Latitude,Longitude,County,Formatted_address,FIPS,Global_code,URL" > "$master_csv"
+fi
 
 # Process states in parallel if threads are specified
 if [ -n "$threads" ]; then
-    export -f process_state extract_attraction_info get_geo_info sanitize handle_error
+    export -f process_state extract_attraction_info get_geo_info sanitize handle_error check_and_resume
     export urlbase output_dir
     printf "%s\n" "${states[@]}" | xargs -I{} -P "$threads" bash -c 'process_state "$@"' _ {}
     

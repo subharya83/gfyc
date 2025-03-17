@@ -6,6 +6,7 @@ states=('AL' 'AK' 'AZ' 'AR' 'CA' 'CO' 'CT' 'DE' 'DC' 'FL' 'GA' 'HI' 'ID' 'IL'
  'NH' 'NJ' 'NM' 'NY' 'NC' 'ND' 'OH' 'OK' 'OR' 'PA' 'PR' 'RI' 'SC' 'SD' 'TN' 
  'TX' 'UT' 'VT' 'VI' 'VA' 'WA' 'WV' 'WI' 'WY')
 
+
 urlbase='https://www.roadsideamerica.com/'
 
 # Function to display usage
@@ -53,7 +54,7 @@ extract_attraction_info() {
 # Function to get latitude, longitude, county, formatted address, and FIPS code from an address using Google Maps API and FCC API
 get_geo_info() {
     local address="$1"
-    local api_key="AIzaSyCUfXqvurEH_EMMahJUoajN1tkR4HCdUDk"  # Replace with your Google Maps API key
+    local api_key="API"  # Replace with your Google Maps API key
     local encoded_address=$(echo "$address" | jq -sRr @uri)  # URL-encode the address
     local api_url="https://maps.googleapis.com/maps/api/geocode/json?address=$encoded_address&key=$api_key"
 
@@ -185,7 +186,7 @@ fi
 mkdir -p "$output_dir"
 
 # Initialize master CSV file with header
-master_csv="$output_dir/master_attractions.csv"
+master_csv="$output_dir/attractions.csv"
 if [ ! -f "$master_csv" ]; then
     echo "Attraction_name,Place_id,Latitude,Longitude,County,Formatted_address,FIPS,Global_code,URL" > "$master_csv"
 fi

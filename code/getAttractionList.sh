@@ -91,32 +91,6 @@ get_geo_info() {
     echo "\"$place_id\", \"$formatted_address\", \"$county\", \"$state\", \"$latitude\", \"$longitude\", \"$fips_code\", \"$global_code\""
 }
 
-# Function to check and resume from the last processed record
-check_and_resume() {
-    local st="$1"
-    local output_dir="$2"
-    local master_csv="$output_dir/master_attractions.csv"
-    local temp_file="$output_dir/${st}_temp.csv"
-    local ofile="$output_dir/$st.txt"
-
-    # Check if the master CSV file exists
-    if [ -f "$master_csv" ]; then
-        # Extract the last processed attraction name for the state
-        last_processed_attraction=$(grep "\",\"$st\"" "$master_csv" | tail -n 1 | awk -F'"' '{print $2}')
-        
-        if [ -n "$last_processed_attraction" ]; then
-            echo "Resuming from the last processed attraction: $last_processed_attraction"
-            # Find the line number of the last processed attraction in the state file
-            resume_line=$(grep -n "$last_processed_attraction" "$ofile" | cut -d: -f1)
-            if [ -n "$resume_line" ]; then
-                # Skip already processed attractions
-                tail -n +$((resume_line + 1)) "$ofile" > "$ofile.tmp"
-                mv "$ofile.tmp" "$ofile"
-            fi
-        fi
-    fi
-}
-
 # Function to process a single state
 process_state() {
     local st="$1"
@@ -134,9 +108,6 @@ process_state() {
         rm -f all
     fi
 
-    # Check and resume from the last processed record
-    check_and_resume "$st" "$output_dir"
-
     # Create a temporary file for this state's attractions
     local temp_file="$output_dir/${st}_temp.csv"
 
@@ -145,7 +116,7 @@ process_state() {
         attr_suff=$(echo "$p" | sed -e 's/.*<a href="//g' -e 's/">.*//g')
         _att_url=$urlbase$attr_suff
         
-        # Extract attraction info using the function from getAtrInfo.sh
+        # Extract attraction info
         _att=$(extract_attraction_info "$_att_url")
         _att_name=$(echo "$_att" | awk -F'"' '{print $2}')
         echo $_att_name
@@ -153,7 +124,7 @@ process_state() {
         _att_addr=$(echo "$_att" | awk -F'"' '{print $4}')
         echo $_att_addr
         
-        # Get geo info for the address using the function from getAtrInfo.sh
+        # Get geo info for the address
         _geo=$(get_geo_info "$_att_addr")
         
         # Append the combined information to the temporary CSV file
@@ -193,7 +164,7 @@ fi
 
 # Process states in parallel if threads are specified
 if [ -n "$threads" ]; then
-    export -f process_state extract_attraction_info get_geo_info sanitize handle_error check_and_resume
+    export -f process_state extract_attraction_info get_geo_info sanitize handle_error
     export urlbase output_dir
     printf "%s\n" "${states[@]}" | xargs -I{} -P "$threads" bash -c 'process_state "$@"' _ {}
     

@@ -29,13 +29,8 @@ extract_attraction_info() {
         address=$(echo "$html_content" | grep -A3 '<dt>Address:</dt>' | grep -o '<dd><a href="/map/[^>]*>[^<]*' | sed 's/.*">//')
     fi
     address=$(sanitize "$address")
-
-    # Extract the state from the title (e.g., "Albertville, AL")
-    local state=$(echo "$attraction_name" | grep -o '[A-Z][A-Z]$')
-    state=$(sanitize "$state")
-
     # Output the information in CSV format
-    echo "\"$attraction_name\", \"$address\", \"$state\", \"$url\""
+    echo "\"$attraction_name\", \"$address\""
 }
 
 # Function to get latitude, longitude, county, formatted address, and FIPS code from an address using Google Maps API and FCC API
@@ -47,6 +42,7 @@ get_geo_info() {
 
     # Make the API call and parse the JSON response
     local response=$(curl -s "$api_url")
+
     local latitude=$(echo "$response" | jq -r '.results[0].geometry.location.lat')
     latitude=$(sanitize "$latitude")
     
@@ -69,8 +65,12 @@ get_geo_info() {
         fips_code=$(curl -s "https://geo.fcc.gov/api/census/block/find?latitude=$latitude&longitude=$longitude&format=json" | jq -r '.County.FIPS')
         fips_code=$(sanitize "$fips_code")
     fi
+    # Get unique PlaceID
+    local place_id=$(echo "$response" | jq -r '.results[0].place_id')
+    # Get global Plus code
+    local global_code=$(echo "$response" | jq -r '.results[0].plus_code.global_code')
 
-    echo "\"$latitude\", \"$longitude\", \"$county\", \"$formatted_address\", \"$state\", \"$fips_code\""
+    echo "\"$place_id\", \"$formatted_address\", \"$county\", \"$state\", \"$latitude\", \"$longitude\", \"$fips_code\", \"$global_code\""
 }
 
 # Main script logic
